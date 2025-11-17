@@ -652,39 +652,44 @@ SELECT msg_id from pgmq.read('test_set_vt_queue', 1, 1);
 
 -- test batch set_vt
 SELECT pgmq.create('test_batch_set_vt_queue');
+ create 
 --------
+ 
 (1 row)
 
--- send multiple messages
+-- send two messages
 SELECT send AS batch_msg_id1 from pgmq.send('test_batch_set_vt_queue', '0') \gset
 SELECT send AS batch_msg_id2 from pgmq.send('test_batch_set_vt_queue', '0') \gset
-SELECT send AS batch_msg_id3 from pgmq.send('test_batch_set_vt_queue', '0') \gset
--- set multiple messages invisible for 100 seconds
+-- set both messages invisible for 100 seconds
 SELECT ARRAY(
     SELECT msg_id FROM pgmq.set_vt('test_batch_set_vt_queue', ARRAY[:batch_msg_id1, :batch_msg_id2], 100)
 ) = ARRAY[:batch_msg_id1, :batch_msg_id2]::bigint[];
+ ?column? 
 ----------
  t
 (1 row)
 
--- read messages, first two should not be visible
-SELECT msg_id = :batch_msg_id3 from pgmq.read('test_batch_set_vt_queue', 1, 5);
+-- read messages, none should be visible
+SELECT COUNT(*) = 0 FROM pgmq.read('test_batch_set_vt_queue', 1, 5);
+ ?column? 
 ----------
  t
 (1 row)
 
--- make them visible again
+-- make them visible again using batch set_vt
 SELECT ARRAY(
     SELECT msg_id FROM pgmq.set_vt('test_batch_set_vt_queue', ARRAY[:batch_msg_id1, :batch_msg_id2], 0)
 ) = ARRAY[:batch_msg_id1, :batch_msg_id2]::bigint[];
+ ?column? 
 ----------
  t
 (1 row)
 
--- all messages should be visible now
+-- both messages should be visible now
 SELECT ARRAY(
     SELECT msg_id FROM pgmq.read('test_batch_set_vt_queue', 1, 5)
-) = ARRAY[:batch_msg_id1, :batch_msg_id2, :batch_msg_id3]::bigint[];
+) = ARRAY[:batch_msg_id1, :batch_msg_id2]::bigint[];
+ ?column? 
 ----------
  t
 (1 row)

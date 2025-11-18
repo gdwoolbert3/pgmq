@@ -108,6 +108,7 @@ DECLARE
     new_vt TIMESTAMP WITH TIME ZONE;
 BEGIN
     new_vt := clock_timestamp() + make_interval(secs => vt);
+    
     sql := FORMAT(
         $QUERY$
         UPDATE pgmq.%I

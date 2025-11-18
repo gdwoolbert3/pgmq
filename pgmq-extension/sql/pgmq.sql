@@ -611,17 +611,20 @@ RETURNS SETOF pgmq.message_record AS $$
 DECLARE
     sql TEXT;
     qtable TEXT := pgmq.format_table_name(queue_name, 'q');
+    new_vt TIMESTAMP WITH TIME ZONE;
 BEGIN
+    new_vt := clock_timestamp() + make_interval(secs => vt);
+
     sql := FORMAT(
         $QUERY$
         UPDATE pgmq.%I
-        SET vt = (clock_timestamp() + $2)
-        WHERE msg_id = ANY($1)
+        SET vt = $1
+        WHERE msg_id = ANY($2)
         RETURNING *;
         $QUERY$,
         qtable
     );
-    RETURN QUERY EXECUTE sql USING msg_ids, make_interval(secs => vt);
+    RETURN QUERY EXECUTE sql USING new_vt, msg_ids;
 END;
 $$ LANGUAGE plpgsql;
 

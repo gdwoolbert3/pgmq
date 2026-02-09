@@ -734,6 +734,122 @@ SELECT pgmq.send_topic('single', '{"test": 4}'::jsonb, NULL, 0) IS NOT NULL;
 SELECT pgmq.drop_queue('validation_queue');
 DELETE FROM pgmq.topic_bindings;
 
+-- =============================================================================
+-- Tests for send_batch_topic()
+-- =============================================================================
+
+-- test_send_batch_topic_basic
+-- Test basic batch sending to topics
+SELECT pgmq.create('batch_topic_queue_1');
+SELECT pgmq.create('batch_topic_queue_2');
+SELECT pgmq.bind_topic('batch.test.*', 'batch_topic_queue_1');
+SELECT pgmq.bind_topic('batch.#', 'batch_topic_queue_2');
+
+-- Send a batch of 3 messages
+SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
+    'batch.test.messages',
+    ARRAY['{"id": 1}'::jsonb, '{"id": 2}'::jsonb, '{"id": 3}'::jsonb]
+) ORDER BY queue_name, msg_id;
+
+-- Should have 3 messages in each queue
+SELECT COUNT(*) = 3 FROM pgmq.q_batch_topic_queue_1;
+SELECT COUNT(*) = 3 FROM pgmq.q_batch_topic_queue_2;
+
+-- Clean up
+SELECT pgmq.purge_queue('batch_topic_queue_1');
+SELECT pgmq.purge_queue('batch_topic_queue_2');
+DELETE FROM pgmq.topic_bindings;
+
+-- test_send_batch_topic_with_headers
+-- Test batch sending with headers
+SELECT pgmq.bind_topic('headers.test', 'batch_topic_queue_1');
+
+SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
+    'headers.test',
+    ARRAY['{"msg": 1}'::jsonb, '{"msg": 2}'::jsonb]::jsonb[],
+    ARRAY['{"header": "A"}'::jsonb, '{"header": "B"}'::jsonb]::jsonb[]
+) ORDER BY queue_name, msg_id;
+
+-- Verify messages and headers
+SELECT message, headers FROM pgmq.q_batch_topic_queue_1 ORDER BY msg_id;
+
+-- Clean up
+SELECT pgmq.purge_queue('batch_topic_queue_1');
+DELETE FROM pgmq.topic_bindings;
+
+-- test_send_batch_topic_with_delay
+-- Test batch sending with delay
+SELECT pgmq.bind_topic('delay.test', 'batch_topic_queue_1');
+
+SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
+    'delay.test',
+    ARRAY['{"delayed": true}'::jsonb]::jsonb[],
+    5
+) ORDER BY queue_name, msg_id;
+
+-- Message should be invisible due to delay
+SELECT COUNT(*) = 0 FROM pgmq.read('batch_topic_queue_1', 1, 1);
+SELECT COUNT(*) = 1 FROM pgmq.q_batch_topic_queue_1;
+
+-- Clean up
+SELECT pgmq.purge_queue('batch_topic_queue_1');
+DELETE FROM pgmq.topic_bindings;
+
+-- test_send_batch_topic_no_matches
+-- Test sending to routing key with no bindings
+SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
+    'no.matches.here',
+    ARRAY['{"test": 1}'::jsonb]
+);
+
+-- Should have 0 messages in queues
+SELECT COUNT(*) = 0 FROM pgmq.q_batch_topic_queue_1;
+SELECT COUNT(*) = 0 FROM pgmq.q_batch_topic_queue_2;
+
+-- test_send_batch_topic_single_queue
+-- Test sending to a single queue (edge case between 0 and multiple)
+SELECT pgmq.bind_topic('single.queue.test', 'batch_topic_queue_1');
+
+SELECT queue_name, COUNT(*) as msg_count
+FROM pgmq.send_batch_topic(
+    'single.queue.test',
+    ARRAY['{"a": 1}'::jsonb, '{"b": 2}'::jsonb]
+)
+GROUP BY queue_name;
+
+-- Clean up
+SELECT pgmq.purge_queue('batch_topic_queue_1');
+DELETE FROM pgmq.topic_bindings;
+
+-- test_send_batch_topic_null_validation
+-- Test NULL validation
+SELECT pgmq.bind_topic('validation.test', 'batch_topic_queue_1');
+
+-- Should fail: NULL messages array
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', NULL);
+\set ON_ERROR_STOP 1
+
+-- Should fail: empty messages array
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', ARRAY[]::jsonb[]);
+\set ON_ERROR_STOP 1
+
+-- Should fail: negative delay
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], -1);
+\set ON_ERROR_STOP 1
+
+-- Should fail: invalid routing key
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('invalid..key', ARRAY['{"test": 1}'::jsonb]);
+\set ON_ERROR_STOP 1
+
+-- Clean up
+DELETE FROM pgmq.topic_bindings;
+SELECT pgmq.drop_queue('batch_topic_queue_1');
+SELECT pgmq.drop_queue('batch_topic_queue_2');
+
 -- Clean up all test queues
 SELECT pgmq.drop_queue('topic_queue_2');
 SELECT pgmq.drop_queue('topic_queue_3');

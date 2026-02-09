@@ -269,3 +269,86 @@ BEGIN
     RETURN pgmq.send_topic(routing_key, msg, NULL, delay);
 END;
 $$;
+
+-- send_batch_topic: Main implementation with all parameters
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[],
+    headers jsonb[],
+    delay integer
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE plpgsql
+    VOLATILE
+AS
+$$
+DECLARE
+    b RECORD;
+BEGIN
+    PERFORM pgmq.validate_routing_key(routing_key);
+
+    IF msgs IS NULL OR array_length(msgs, 1) IS NULL THEN
+        RAISE EXCEPTION 'msgs cannot be NULL or empty';
+    END IF;
+
+    IF delay < 0 THEN
+        RAISE EXCEPTION 'delay cannot be negative, got: %', delay;
+    END IF;
+
+    -- Filter matching patterns in SQL for better performance (uses index)
+    -- Any failure will rollback the entire transaction
+    FOR b IN
+        SELECT tb.queue_name
+        FROM pgmq.topic_bindings tb
+        WHERE routing_key ~ tb.compiled_regex
+        ORDER BY tb.pattern -- Deterministic ordering
+        LOOP
+            RETURN QUERY
+            SELECT b.queue_name, batch_result.msg_id
+            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id);
+        END LOOP;
+
+    RETURN;
+END;
+$$;
+
+-- send_batch_topic: 2 args (routing_key, msgs)
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[]
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE sql
+    VOLATILE
+AS
+$$
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, 0);
+$$;
+
+-- send_batch_topic: 3 args with headers
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[],
+    headers jsonb[]
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE sql
+    VOLATILE
+AS
+$$
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, headers, 0);
+$$;
+
+-- send_batch_topic: 3 args with delay
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[],
+    delay integer
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE sql
+    VOLATILE
+AS
+$$
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, delay);
+$$;

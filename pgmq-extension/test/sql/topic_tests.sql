@@ -850,6 +850,52 @@ DELETE FROM pgmq.topic_bindings;
 SELECT pgmq.drop_queue('batch_topic_queue_1');
 SELECT pgmq.drop_queue('batch_topic_queue_2');
 
+-- =============================================================================
+-- Regression test for duplicate queue prevention (issue #455)
+-- =============================================================================
+
+-- test_no_duplicate_sends_when_multiple_patterns_match_same_queue
+-- Verify that when multiple patterns bind to the same queue and both match
+-- a routing key, the message is only sent once to that queue
+SELECT pgmq.create('dedup_test_queue');
+
+-- Bind two different patterns to the same queue, both will match the same routing key
+SELECT pgmq.bind_topic('logs.*', 'dedup_test_queue');
+SELECT pgmq.bind_topic('logs.#', 'dedup_test_queue');
+
+-- Both patterns match 'logs.error', but message should only be sent once
+SELECT pgmq.send_topic('logs.error', '{"msg": "test"}'::jsonb, NULL, 0);
+
+-- Should have exactly 1 message (not 2)
+SELECT COUNT(*) = 1 FROM pgmq.q_dedup_test_queue;
+
+-- Clean up
+SELECT pgmq.purge_queue('dedup_test_queue');
+
+-- test_no_duplicate_batch_sends_when_multiple_patterns_match_same_queue
+-- Same test but for send_batch_topic
+SELECT pgmq.bind_topic('batch.test.*', 'dedup_test_queue');
+SELECT pgmq.bind_topic('batch.test.#', 'dedup_test_queue');
+
+-- Both patterns match 'batch.test.msg', but batch should only be sent once
+SELECT queue_name, COUNT(*) as msg_count
+FROM pgmq.send_batch_topic(
+    'batch.test.msg',
+    ARRAY['{"id": 1}'::jsonb, '{"id": 2}'::jsonb, '{"id": 3}'::jsonb]
+)
+GROUP BY queue_name;
+
+-- Should have exactly 3 messages (not 6)
+SELECT COUNT(*) = 3 FROM pgmq.q_dedup_test_queue;
+
+-- Verify matched_count is correct for send_topic with deduplication
+SELECT pgmq.purge_queue('dedup_test_queue');
+SELECT pgmq.send_topic('batch.test.msg', '{"msg": "count test"}'::jsonb, NULL, 0) = 1;
+
+-- Clean up
+SELECT pgmq.drop_queue('dedup_test_queue');
+DELETE FROM pgmq.topic_bindings;
+
 -- Clean up all test queues
 SELECT pgmq.drop_queue('topic_queue_2');
 SELECT pgmq.drop_queue('topic_queue_3');

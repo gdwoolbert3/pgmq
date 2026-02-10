@@ -235,10 +235,10 @@ BEGIN
     -- Filter matching patterns in SQL for better performance (uses index)
     -- Any failure will rollback the entire transaction
     FOR b IN
-        SELECT tb.queue_name
+        SELECT DISTINCT tb.queue_name
         FROM pgmq.topic_bindings tb
         WHERE routing_key ~ tb.compiled_regex
-        ORDER BY tb.pattern -- Deterministic ordering
+        ORDER BY tb.queue_name -- Deterministic ordering, deduplicated by queue_name
         LOOP
             PERFORM pgmq.send(b.queue_name, msg, headers, delay);
             matched_count := matched_count + 1;
@@ -298,10 +298,10 @@ BEGIN
     -- Filter matching patterns in SQL for better performance (uses index)
     -- Any failure will rollback the entire transaction
     FOR b IN
-        SELECT tb.queue_name
+        SELECT DISTINCT tb.queue_name
         FROM pgmq.topic_bindings tb
         WHERE routing_key ~ tb.compiled_regex
-        ORDER BY tb.pattern -- Deterministic ordering
+        ORDER BY tb.queue_name -- Deterministic ordering, deduplicated by queue_name
         LOOP
             RETURN QUERY
             SELECT b.queue_name, batch_result.msg_id

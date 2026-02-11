@@ -78,6 +78,14 @@ SELECT ARRAY( SELECT pgmq.send_batch(
 
 SELECT msg_id, message, headers from pgmq.read('batch_queue', 0, 2);
 
+-- test that send_batch validates headers array length matches msgs array length
+-- should fail with mismatched array lengths
+SELECT pgmq.send_batch(
+    'batch_queue',
+    ARRAY['{"msg": 1}', '{"msg": 2}']::jsonb[],
+    ARRAY['{"header": 1}', '{"header": 2}', '{"header": 3}']::jsonb[]
+);
+
 -- send a batch of 2 messages with timestamp
 SELECT pgmq.create('batch_queue_vt');
 SELECT ARRAY( SELECT pgmq.send_batch(

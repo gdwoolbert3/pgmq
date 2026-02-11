@@ -352,3 +352,32 @@ AS
 $$
     SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, delay);
 $$;
+
+-- Fix: Add validation to send_batch to ensure headers array length matches msgs array length
+CREATE OR REPLACE FUNCTION pgmq.send_batch(
+    queue_name TEXT,
+    msgs JSONB[],
+    headers JSONB[],
+    delay TIMESTAMP WITH TIME ZONE
+) RETURNS SETOF BIGINT AS $$
+DECLARE
+    sql TEXT;
+    qtable TEXT := pgmq.format_table_name(queue_name, 'q');
+BEGIN
+    -- Validate that headers array length matches msgs array length if headers is provided
+    IF headers IS NOT NULL AND array_length(headers, 1) != array_length(msgs, 1) THEN
+        RAISE EXCEPTION 'headers array length (%) must match msgs array length (%)',
+            array_length(headers, 1), array_length(msgs, 1);
+    END IF;
+
+    sql := FORMAT(
+            $QUERY$
+        INSERT INTO pgmq.%I (vt, message, headers)
+        SELECT $2, unnest($1), unnest(coalesce($3, ARRAY[]::jsonb[]))
+        RETURNING msg_id;
+        $QUERY$,
+            qtable
+           );
+    RETURN QUERY EXECUTE sql USING msgs, delay, headers;
+END;
+$$ LANGUAGE plpgsql;

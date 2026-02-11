@@ -190,6 +190,16 @@ SELECT msg_id, message, headers from pgmq.read('batch_queue', 0, 2);
       2 | {"hello": "world_1"} | {"header": 2}
 (2 rows)
 
+-- test that send_batch validates headers array length matches msgs array length
+-- should fail with mismatched array lengths
+SELECT pgmq.send_batch(
+    'batch_queue',
+    ARRAY['{"msg": 1}', '{"msg": 2}']::jsonb[],
+    ARRAY['{"header": 1}', '{"header": 2}', '{"header": 3}']::jsonb[]
+);
+ERROR:  headers array length (3) must match msgs array length (2)
+CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 8 at RAISE
+SQL function "send_batch" statement 1
 -- send a batch of 2 messages with timestamp
 SELECT pgmq.create('batch_queue_vt');
  create 

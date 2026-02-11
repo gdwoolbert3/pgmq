@@ -670,6 +670,12 @@ DECLARE
     sql TEXT;
     qtable TEXT := pgmq.format_table_name(queue_name, 'q');
 BEGIN
+    -- Validate that headers array length matches msgs array length if headers is provided
+    IF headers IS NOT NULL AND array_length(headers, 1) != array_length(msgs, 1) THEN
+        RAISE EXCEPTION 'headers array length (%) must match msgs array length (%)',
+            array_length(headers, 1), array_length(msgs, 1);
+    END IF;
+
     sql := FORMAT(
             $QUERY$
         INSERT INTO pgmq.%I (vt, message, headers)

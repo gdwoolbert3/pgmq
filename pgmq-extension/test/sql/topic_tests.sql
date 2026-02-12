@@ -825,6 +825,9 @@ DELETE FROM pgmq.topic_bindings;
 -- Test NULL validation
 SELECT pgmq.bind_topic('validation.test', 'batch_topic_queue_1');
 
+-- Use terse verbosity to make error output consistent across PG versions
+\set VERBOSITY terse
+
 -- Should fail: NULL messages array
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', NULL);
@@ -859,6 +862,9 @@ SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb, '{"t
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], ARRAY[]::jsonb[]);
 \set ON_ERROR_STOP 1
+
+-- Restore default verbosity
+\set VERBOSITY default
 
 -- Clean up
 DELETE FROM pgmq.topic_bindings;

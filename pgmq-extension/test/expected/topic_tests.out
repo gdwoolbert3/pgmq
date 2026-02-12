@@ -1642,77 +1642,45 @@ SELECT pgmq.bind_topic('validation.test', 'batch_topic_queue_1');
  
 (1 row)
 
+-- Use terse verbosity to make error output consistent across PG versions
+\set VERBOSITY terse
 -- Should fail: NULL messages array
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', NULL);
 ERROR:  msgs cannot be NULL or empty
-CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 8 at RAISE
-SQL function "send_batch" statement 1
-SQL statement "SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 19 at RETURN QUERY
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: empty messages array
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY[]::jsonb[]);
 ERROR:  msgs cannot be NULL or empty
-CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 8 at RAISE
-SQL function "send_batch" statement 1
-SQL statement "SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 19 at RETURN QUERY
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: negative delay
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], -1);
 ERROR:  delay cannot be negative, got: -1
-CONTEXT:  PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 8 at RAISE
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: invalid routing key
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('invalid..key', ARRAY['{"test": 1}'::jsonb]);
 ERROR:  routing_key cannot contain consecutive dots. Got: invalid..key
-CONTEXT:  PL/pgSQL function pgmq.validate_routing_key(text) line 38 at RAISE
-SQL statement "SELECT pgmq.validate_routing_key(routing_key)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 5 at PERFORM
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: headers array length greater than msgs array length
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], ARRAY['{"h": 1}'::jsonb, '{"h": 2}'::jsonb]);
 ERROR:  headers array length (2) must match msgs array length (1)
-CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 14 at RAISE
-SQL function "send_batch" statement 1
-SQL statement "SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 19 at RETURN QUERY
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: headers array length less than msgs array length
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb, '{"test": 2}'::jsonb], ARRAY['{"h": 1}'::jsonb]);
 ERROR:  headers array length (1) must match msgs array length (2)
-CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 14 at RAISE
-SQL function "send_batch" statement 1
-SQL statement "SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 19 at RETURN QUERY
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
 -- Should fail: empty headers array with non-empty msgs array
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], ARRAY[]::jsonb[]);
 ERROR:  headers array length (0) must match msgs array length (1)
-CONTEXT:  PL/pgSQL function pgmq.send_batch(text,jsonb[],jsonb[],timestamp with time zone) line 14 at RAISE
-SQL function "send_batch" statement 1
-SQL statement "SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id)"
-PL/pgSQL function pgmq.send_batch_topic(text,jsonb[],jsonb[],integer) line 19 at RETURN QUERY
-SQL function "send_batch_topic" statement 1
 \set ON_ERROR_STOP 1
+-- Restore default verbosity
+\set VERBOSITY default
 -- Clean up
 DELETE FROM pgmq.topic_bindings;
 SELECT pgmq.drop_queue('batch_topic_queue_1');

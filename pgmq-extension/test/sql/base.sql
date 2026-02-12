@@ -86,6 +86,20 @@ SELECT pgmq.send_batch(
     ARRAY['{"header": 1}', '{"header": 2}', '{"header": 3}']::jsonb[]
 );
 
+-- test that send_batch validates msgs is not empty
+-- should fail with empty msgs array
+SELECT pgmq.send_batch(
+    'batch_queue',
+    ARRAY[]::jsonb[]
+);
+
+-- should fail with empty msgs and empty headers array
+SELECT pgmq.send_batch(
+    'batch_queue',
+    ARRAY[]::jsonb[],
+    ARRAY[]::jsonb[]
+);
+
 -- send a batch of 2 messages with timestamp
 SELECT pgmq.create('batch_queue_vt');
 SELECT ARRAY( SELECT pgmq.send_batch(

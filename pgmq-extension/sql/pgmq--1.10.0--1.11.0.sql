@@ -287,10 +287,6 @@ DECLARE
 BEGIN
     PERFORM pgmq.validate_routing_key(routing_key);
 
-    IF msgs IS NULL OR array_length(msgs, 1) IS NULL THEN
-        RAISE EXCEPTION 'msgs cannot be NULL or empty';
-    END IF;
-
     IF delay < 0 THEN
         RAISE EXCEPTION 'delay cannot be negative, got: %', delay;
     END IF;
@@ -364,10 +360,16 @@ DECLARE
     sql TEXT;
     qtable TEXT := pgmq.format_table_name(queue_name, 'q');
 BEGIN
+    -- Validate that msgs is not NULL or empty
+    IF msgs IS NULL OR array_length(msgs, 1) IS NULL THEN
+        RAISE EXCEPTION 'msgs cannot be NULL or empty';
+    END IF;
+
     -- Validate that headers array length matches msgs array length if headers is provided
-    IF headers IS NOT NULL AND array_length(headers, 1) != array_length(msgs, 1) THEN
+    -- Note: array_length returns NULL for empty arrays, so we use COALESCE to treat empty arrays as length 0
+    IF headers IS NOT NULL AND COALESCE(array_length(headers, 1), 0) != COALESCE(array_length(msgs, 1), 0) THEN
         RAISE EXCEPTION 'headers array length (%) must match msgs array length (%)',
-            array_length(headers, 1), array_length(msgs, 1);
+            COALESCE(array_length(headers, 1), 0), COALESCE(array_length(msgs, 1), 0);
     END IF;
 
     sql := FORMAT(

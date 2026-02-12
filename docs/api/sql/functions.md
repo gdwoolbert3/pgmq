@@ -96,6 +96,8 @@ RETURNS SETOF bigint
 
 **Returns:** The IDs of the messages that were added to the queue.
 
+**Validation:** When `headers` is provided (not NULL), its array length must exactly match the length of `msgs`. This includes empty arrays - an empty headers array (e.g., `ARRAY[]::jsonb[]`) will fail validation if `msgs` is not empty. To send messages without headers, either omit the `headers` parameter or pass NULL.
+
 Examples:
 
 ```sql
@@ -229,6 +231,8 @@ RETURNS TABLE(queue_name text, msg_id bigint)
 | delay       | integer  | Time in seconds before the messages become visible                |
 
 **Returns:** A table with the queue name and message ID for each message sent.
+
+**Validation:** This function uses `send_batch` internally, so the same validation rules apply: when `headers` is provided (not NULL), its array length must exactly match the length of `msgs`. Empty headers arrays will fail validation if `msgs` is not empty.
 
 Examples:
 

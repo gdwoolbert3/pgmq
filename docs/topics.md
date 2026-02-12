@@ -203,7 +203,7 @@ SELECT * FROM pgmq.send_batch_topic('alerts.critical', ARRAY['{"alert": "down"}'
 
 - Each message in the batch is sent to all matching queues
 - If the routing key matches 2 queues and you send 3 messages, you get 6 total messages (3 per queue)
-- Headers array must match the length of messages array (or be omitted/NULL)
+- Headers array length must exactly match messages array length when provided (not NULL). Empty headers arrays will fail validation if msgs is not empty. To send without headers, omit the parameter or pass NULL
 - If no patterns match the routing key, returns an empty result set
 - All sends succeed or all fail (transactional)
 

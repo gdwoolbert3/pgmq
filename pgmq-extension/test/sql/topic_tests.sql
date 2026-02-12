@@ -845,6 +845,21 @@ SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], -1)
 SELECT pgmq.send_batch_topic('invalid..key', ARRAY['{"test": 1}'::jsonb]);
 \set ON_ERROR_STOP 1
 
+-- Should fail: headers array length greater than msgs array length
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], ARRAY['{"h": 1}'::jsonb, '{"h": 2}'::jsonb]);
+\set ON_ERROR_STOP 1
+
+-- Should fail: headers array length less than msgs array length
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb, '{"test": 2}'::jsonb], ARRAY['{"h": 1}'::jsonb]);
+\set ON_ERROR_STOP 1
+
+-- Should fail: empty headers array with non-empty msgs array
+\set ON_ERROR_STOP 0
+SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], ARRAY[]::jsonb[]);
+\set ON_ERROR_STOP 1
+
 -- Clean up
 DELETE FROM pgmq.topic_bindings;
 SELECT pgmq.drop_queue('batch_topic_queue_1');

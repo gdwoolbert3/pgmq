@@ -159,6 +159,7 @@ Send multiple messages to all queues whose patterns match the routing key.
 - `msgs` (jsonb[]): Array of message payloads to send
 - `headers` (jsonb[]): Optional array of headers for each message
 - `delay` (integer): Delay in seconds before messages become visible
+- `delay` (timestamp with time zone): Timestamp when messages become visible
 
 **Returns:** Table with columns:
 - `queue_name` (text): Name of the queue that received messages
@@ -197,6 +198,13 @@ SELECT * FROM pgmq.send_batch_topic(
 -- Simplified versions
 SELECT * FROM pgmq.send_batch_topic('logs.info', ARRAY['{"msg": "test"}']::jsonb[]);
 SELECT * FROM pgmq.send_batch_topic('alerts.critical', ARRAY['{"alert": "down"}']::jsonb[], 60); -- 60 second delay
+
+-- With timestamp delay (visible in 1 hour)
+SELECT * FROM pgmq.send_batch_topic(
+    'scheduled.tasks',
+    ARRAY['{"task": "backup"}']::jsonb[],
+    CURRENT_TIMESTAMP + INTERVAL '1 hour'
+);
 ```
 
 **Notes:**

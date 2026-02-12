@@ -795,6 +795,24 @@ SELECT COUNT(*) = 1 FROM pgmq.q_batch_topic_queue_1;
 SELECT pgmq.purge_queue('batch_topic_queue_1');
 DELETE FROM pgmq.topic_bindings;
 
+-- test_send_batch_topic_with_timestamp_delay
+-- Test batch sending with timestamp delay
+SELECT pgmq.bind_topic('timestamp_delay.test', 'batch_topic_queue_1');
+
+SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
+    'timestamp_delay.test',
+    ARRAY['{"delayed_timestamp": true}'::jsonb]::jsonb[],
+    clock_timestamp() + interval '3 seconds'
+) ORDER BY queue_name, msg_id;
+
+-- Message should be invisible due to delay
+SELECT COUNT(*) = 0 FROM pgmq.read('batch_topic_queue_1', 1, 1);
+SELECT COUNT(*) = 1 FROM pgmq.q_batch_topic_queue_1;
+
+-- Clean up
+SELECT pgmq.purge_queue('batch_topic_queue_1');
+DELETE FROM pgmq.topic_bindings;
+
 -- test_send_batch_topic_no_matches
 -- Test sending to routing key with no bindings
 SELECT queue_name, msg_id FROM pgmq.send_batch_topic(
@@ -836,11 +854,6 @@ SELECT pgmq.send_batch_topic('validation.test', NULL);
 -- Should fail: empty messages array
 \set ON_ERROR_STOP 0
 SELECT pgmq.send_batch_topic('validation.test', ARRAY[]::jsonb[]);
-\set ON_ERROR_STOP 1
-
--- Should fail: negative delay
-\set ON_ERROR_STOP 0
-SELECT pgmq.send_batch_topic('validation.test', ARRAY['{"test": 1}'::jsonb], -1);
 \set ON_ERROR_STOP 1
 
 -- Should fail: invalid routing key

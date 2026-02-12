@@ -216,7 +216,9 @@ Send multiple messages to all queues whose patterns match the routing key.
 pgmq.send_batch_topic(routing_key text, msgs jsonb[])
 pgmq.send_batch_topic(routing_key text, msgs jsonb[], headers jsonb[])
 pgmq.send_batch_topic(routing_key text, msgs jsonb[], delay integer)
+pgmq.send_batch_topic(routing_key text, msgs jsonb[], delay timestamp with time zone)
 pgmq.send_batch_topic(routing_key text, msgs jsonb[], headers jsonb[], delay integer)
+pgmq.send_batch_topic(routing_key text, msgs jsonb[], headers jsonb[], delay timestamp with time zone)
 
 RETURNS TABLE(queue_name text, msg_id bigint)
 ```
@@ -229,10 +231,11 @@ RETURNS TABLE(queue_name text, msg_id bigint)
 | msgs        | jsonb[]  | Array of message payloads to send                                 |
 | headers     | jsonb[]  | Optional array of headers for each message                        |
 | delay       | integer  | Time in seconds before the messages become visible                |
+| delay       | timestamp with time zone | Timestamp when the messages become visible           |
 
 **Returns:** A table with the queue name and message ID for each message sent.
 
-**Validation:** This function uses `send_batch` internally, so the same validation rules apply: when `headers` is provided (not NULL), its array length must exactly match the length of `msgs`. Empty headers arrays will fail validation if `msgs` is not empty.
+**Validation:** When `headers` is provided (not NULL), its array length must exactly match the length of `msgs`. Empty headers arrays will fail validation if `msgs` is not empty. To send messages without headers, either omit the `headers` parameter or pass NULL.
 
 Examples:
 
@@ -265,6 +268,13 @@ select * from pgmq.send_batch_topic(
     'alerts.critical',
     array['{"alert": "system down"}']::jsonb[],
     60
+);
+
+-- With timestamp delay (visible in 1 hour)
+select * from pgmq.send_batch_topic(
+    'scheduled.tasks',
+    array['{"task": "backup"}']::jsonb[],
+    CURRENT_TIMESTAMP + INTERVAL '1 hour'
 );
 ```
 

@@ -270,12 +270,12 @@ BEGIN
 END;
 $$;
 
--- send_batch_topic: Main implementation with all parameters
+-- send_batch_topic: Base implementation with TIMESTAMP WITH TIME ZONE delay
 CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
     routing_key text,
     msgs jsonb[],
     headers jsonb[],
-    delay integer
+    delay TIMESTAMP WITH TIME ZONE
 )
     RETURNS TABLE(queue_name text, msg_id bigint)
     LANGUAGE plpgsql
@@ -287,9 +287,8 @@ DECLARE
 BEGIN
     PERFORM pgmq.validate_routing_key(routing_key);
 
-    IF delay < 0 THEN
-        RAISE EXCEPTION 'delay cannot be negative, got: %', delay;
-    END IF;
+    -- Validate batch parameters once (not per queue)
+    PERFORM pgmq._validate_batch_params(msgs, headers);
 
     -- Filter matching patterns in SQL for better performance (uses index)
     -- Any failure will rollback the entire transaction
@@ -299,9 +298,10 @@ BEGIN
         WHERE routing_key ~ tb.compiled_regex
         ORDER BY tb.queue_name -- Deterministic ordering, deduplicated by queue_name
         LOOP
+            -- Use private _send_batch to avoid redundant validation
             RETURN QUERY
             SELECT b.queue_name, batch_result.msg_id
-            FROM pgmq.send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id);
+            FROM pgmq._send_batch(b.queue_name, msgs, headers, delay) AS batch_result(msg_id);
         END LOOP;
 
     RETURN;
@@ -318,7 +318,7 @@ CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
     VOLATILE
 AS
 $$
-    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, 0);
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, clock_timestamp());
 $$;
 
 -- send_batch_topic: 3 args with headers
@@ -332,10 +332,10 @@ CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
     VOLATILE
 AS
 $$
-    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, headers, 0);
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, headers, clock_timestamp());
 $$;
 
--- send_batch_topic: 3 args with delay
+-- send_batch_topic: 3 args with integer delay
 CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
     routing_key text,
     msgs jsonb[],
@@ -346,19 +346,46 @@ CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
     VOLATILE
 AS
 $$
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, clock_timestamp() + make_interval(secs => delay));
+$$;
+
+-- send_batch_topic: 3 args with timestamp delay
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[],
+    delay TIMESTAMP WITH TIME ZONE
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE sql
+    VOLATILE
+AS
+$$
     SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, NULL, delay);
 $$;
 
+-- send_batch_topic: 4 args with integer delay
+CREATE OR REPLACE FUNCTION pgmq.send_batch_topic(
+    routing_key text,
+    msgs jsonb[],
+    headers jsonb[],
+    delay integer
+)
+    RETURNS TABLE(queue_name text, msg_id bigint)
+    LANGUAGE sql
+    VOLATILE
+AS
+$$
+    SELECT * FROM pgmq.send_batch_topic(routing_key, msgs, headers, clock_timestamp() + make_interval(secs => delay));
+$$;
+
 -- Fix: Add validation to send_batch to ensure headers array length matches msgs array length
-CREATE OR REPLACE FUNCTION pgmq.send_batch(
-    queue_name TEXT,
+-- Refactored to use private functions for better performance and code reuse
+
+-- _validate_batch_params: Private function to validate batch parameters
+CREATE OR REPLACE FUNCTION pgmq._validate_batch_params(
     msgs JSONB[],
-    headers JSONB[],
-    delay TIMESTAMP WITH TIME ZONE
-) RETURNS SETOF BIGINT AS $$
-DECLARE
-    sql TEXT;
-    qtable TEXT := pgmq.format_table_name(queue_name, 'q');
+    headers JSONB[]
+) RETURNS void AS $$
 BEGIN
     -- Validate that msgs is not NULL or empty
     IF msgs IS NULL OR array_length(msgs, 1) IS NULL THEN
@@ -371,7 +398,20 @@ BEGIN
         RAISE EXCEPTION 'headers array length (%) must match msgs array length (%)',
             COALESCE(array_length(headers, 1), 0), COALESCE(array_length(msgs, 1), 0);
     END IF;
+END;
+$$ LANGUAGE plpgsql;
 
+-- _send_batch: Private function that performs the actual batch insert without validation
+CREATE OR REPLACE FUNCTION pgmq._send_batch(
+    queue_name TEXT,
+    msgs JSONB[],
+    headers JSONB[],
+    delay TIMESTAMP WITH TIME ZONE
+) RETURNS SETOF BIGINT AS $$
+DECLARE
+    sql TEXT;
+    qtable TEXT := pgmq.format_table_name(queue_name, 'q');
+BEGIN
     sql := FORMAT(
             $QUERY$
         INSERT INTO pgmq.%I (vt, message, headers)
@@ -381,5 +421,18 @@ BEGIN
             qtable
            );
     RETURN QUERY EXECUTE sql USING msgs, delay, headers;
+END;
+$$ LANGUAGE plpgsql;
+
+-- send_batch: Public function with validation
+CREATE OR REPLACE FUNCTION pgmq.send_batch(
+    queue_name TEXT,
+    msgs JSONB[],
+    headers JSONB[],
+    delay TIMESTAMP WITH TIME ZONE
+) RETURNS SETOF BIGINT AS $$
+BEGIN
+    PERFORM pgmq._validate_batch_params(msgs, headers);
+    RETURN QUERY SELECT * FROM pgmq._send_batch(queue_name, msgs, headers, delay);
 END;
 $$ LANGUAGE plpgsql;

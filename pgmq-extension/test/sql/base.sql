@@ -78,6 +78,9 @@ SELECT ARRAY( SELECT pgmq.send_batch(
 
 SELECT msg_id, message, headers from pgmq.read('batch_queue', 0, 2);
 
+-- Use terse verbosity for validation tests to ensure consistent error output across PG versions
+\set VERBOSITY terse
+
 -- test that send_batch validates headers array length matches msgs array length
 -- should fail with mismatched array lengths
 SELECT pgmq.send_batch(
@@ -99,6 +102,9 @@ SELECT pgmq.send_batch(
     ARRAY[]::jsonb[],
     ARRAY[]::jsonb[]
 );
+
+-- Restore default verbosity
+\set VERBOSITY default
 
 -- send a batch of 2 messages with timestamp
 SELECT pgmq.create('batch_queue_vt');

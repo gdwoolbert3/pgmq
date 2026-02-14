@@ -2162,4 +2162,3 @@ BEGIN
     RETURN QUERY SELECT * FROM pgmq._send_batch(queue_name, msgs, headers, delay);
 END;
 $$ LANGUAGE plpgsql;
-$$;

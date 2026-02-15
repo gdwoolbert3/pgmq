@@ -636,6 +636,18 @@ EXCEPTION WHEN OTHERS THEN
     END IF;
 END $$;
 
+-- test_update_notify_insert_requires_queue_exists
+-- Verify update_notify_insert fails for non-existent queues
+DO $$
+BEGIN
+    PERFORM pgmq.update_notify_insert('nonexistent_queue', 100);
+    RAISE EXCEPTION 'Should have raised an error for non-existent queue';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%does not exist%' THEN
+        RAISE EXCEPTION 'Expected queue does not exist error, got: %', SQLERRM;
+    END IF;
+END $$;
+
 -- test_update_notify_insert_requires_enabled_queue
 -- Verify update_notify_insert fails for queues without notify_insert enabled
 SELECT pgmq.create('notify_queue_disabled');

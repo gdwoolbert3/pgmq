@@ -415,7 +415,7 @@ SELECT pgmq.bind_topic('events.*', 'topic_queue_2');
 SELECT pgmq.bind_topic('alerts.#', 'topic_queue_3');
 
 -- Should return 3 bindings total
-SELECT COUNT(*) = 3 FROM pgmq.topic_bindings();
+SELECT COUNT(*) = 3 FROM pgmq.list_topic_bindings();
 
 -- Verify structure includes all columns
 SELECT
@@ -424,21 +424,21 @@ SELECT
     bool_and(queue_name IS NOT NULL) AS has_queue_name,
     bool_and(bound_at IS NOT NULL) AS has_bound_at,
     bool_and(compiled_regex IS NOT NULL) AS has_compiled_regex
-FROM pgmq.topic_bindings();
+FROM pgmq.list_topic_bindings();
 
--- test_topic_bindings_by_queue_name
--- Test that topic_bindings(queue_name) returns bindings for specific queue
+-- test_list_topic_bindings_by_queue_name
+-- Test that list_topic_bindings(queue_name) returns bindings for specific queue
 SELECT pgmq.bind_topic('orders.created', 'topic_queue_1');
 SELECT pgmq.bind_topic('orders.updated', 'topic_queue_1');
 
 -- Should return 3 bindings for topic_queue_1 (logs.#, orders.created, orders.updated)
-SELECT COUNT(*) = 3 FROM pgmq.topic_bindings('topic_queue_1');
+SELECT COUNT(*) = 3 FROM pgmq.list_topic_bindings('topic_queue_1');
 
 -- Should return 1 binding for topic_queue_2
-SELECT COUNT(*) = 1 FROM pgmq.topic_bindings('topic_queue_2');
+SELECT COUNT(*) = 1 FROM pgmq.list_topic_bindings('topic_queue_2');
 
 -- Should return 1 binding for topic_queue_3
-SELECT COUNT(*) = 1 FROM pgmq.topic_bindings('topic_queue_3');
+SELECT COUNT(*) = 1 FROM pgmq.list_topic_bindings('topic_queue_3');
 
 -- Verify structure for queue-specific function
 SELECT
@@ -447,9 +447,9 @@ SELECT
     bool_and(queue_name = 'topic_queue_1') AS correct_queue,
     bool_and(bound_at IS NOT NULL) AS has_bound_at,
     bool_and(compiled_regex IS NOT NULL) AS has_compiled_regex
-FROM pgmq.topic_bindings('topic_queue_1');
+FROM pgmq.list_topic_bindings('topic_queue_1');
 
--- test_topic_bindings_ordering
+-- test_list_topic_bindings_ordering
 -- Verify bindings are ordered by bound_at DESC, then pattern
 -- Add bindings with slight delays to ensure different timestamps
 SELECT pgmq.bind_topic('first.pattern', 'topic_queue_1');
@@ -460,7 +460,7 @@ SELECT pgmq.bind_topic('third.pattern', 'topic_queue_1');
 
 -- Get the first binding (should be most recent: third.pattern)
 SELECT pattern = 'third.pattern' AS most_recent_first
-FROM pgmq.topic_bindings('topic_queue_1')
+FROM pgmq.list_topic_bindings('topic_queue_1')
 LIMIT 1;
 
 -- Clean up bindings for next tests

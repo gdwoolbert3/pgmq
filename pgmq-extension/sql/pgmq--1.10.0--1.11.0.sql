@@ -271,7 +271,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION pgmq.topic_bindings()
+CREATE OR REPLACE FUNCTION pgmq.list_topic_bindings()
     RETURNS TABLE
             (
                 pattern        text,
@@ -288,7 +288,7 @@ $$
     ORDER BY bound_at DESC, pattern, queue_name;
 $$;
 
-CREATE OR REPLACE FUNCTION pgmq.topic_bindings(queue_name text)
+CREATE OR REPLACE FUNCTION pgmq.list_topic_bindings(queue_name text)
     RETURNS TABLE
             (
                 pattern        text,
@@ -302,11 +302,11 @@ AS
 $$
     SELECT pattern, tb.queue_name, bound_at, compiled_regex
     FROM pgmq.topic_bindings tb
-    WHERE tb.queue_name = topic_bindings.queue_name
+    WHERE tb.queue_name = list_topic_bindings.queue_name
     ORDER BY bound_at DESC, pattern;
 $$;
 
-CREATE OR REPLACE FUNCTION pgmq.insert_notify_throttles()
+CREATE OR REPLACE FUNCTION pgmq.list_notify_insert_throttles()
     RETURNS TABLE
             (
                 queue_name           text,

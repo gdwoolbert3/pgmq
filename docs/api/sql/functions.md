@@ -1383,12 +1383,12 @@ select pgmq.update_notify_insert('my_queue', 1000);
 
 ---
 
-### insert_notify_throttles
+### list_notify_insert_throttles
 
 Returns all notification throttle configurations for queues that have notifications enabled.
 
 ```text
-pgmq.insert_notify_throttles()
+pgmq.list_notify_insert_throttles()
 RETURNS TABLE (
     queue_name text,
     throttle_interval_ms integer,
@@ -1413,7 +1413,7 @@ RETURNS TABLE (
 Example:
 
 ```sql
-select * from pgmq.insert_notify_throttles();
+select * from pgmq.list_notify_insert_throttles();
    queue_name   | throttle_interval_ms |      last_notified_at
 ----------------+----------------------+----------------------------
  my_queue       |                 1000 | 2024-01-15 10:30:45.123456

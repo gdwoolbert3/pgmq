@@ -117,7 +117,7 @@ Remove a pattern binding from a queue.
 SELECT pgmq.unbind_topic('orders.#', 'order_events');
 ```
 
-#### `pgmq.topic_bindings()`
+#### `pgmq.list_topic_bindings()`
 
 Returns all topic bindings across all queues.
 
@@ -131,7 +131,7 @@ Returns all topic bindings across all queues.
 **Example:**
 
 ```sql
-SELECT * FROM pgmq.topic_bindings();
+SELECT * FROM pgmq.list_topic_bindings();
 -- Returns:
 --   pattern      | queue_name  | bound_at                   | compiled_regex
 --   -------------+-------------+----------------------------+-------------------
@@ -144,7 +144,7 @@ SELECT * FROM pgmq.topic_bindings();
 - Results are ordered by `bound_at` DESC (most recent first), then by `pattern` and `queue_name`
 - Use this to audit or debug your topic routing configuration
 
-#### `pgmq.topic_bindings(queue_name)`
+#### `pgmq.list_topic_bindings(queue_name)`
 
 Returns all topic bindings for a specific queue.
 
@@ -162,7 +162,7 @@ Returns all topic bindings for a specific queue.
 **Example:**
 
 ```sql
-SELECT * FROM pgmq.topic_bindings('order_events');
+SELECT * FROM pgmq.list_topic_bindings('order_events');
 -- Returns:
 --   pattern         | queue_name    | bound_at                   | compiled_regex
 --   ----------------+---------------+----------------------------+---------------------
@@ -506,7 +506,7 @@ Patterns are compiled to regular expressions when bound, not at send time:
 ```sql
 -- View all patterns with their compiled regex
 SELECT pattern, queue_name, compiled_regex
-FROM pgmq.topic_bindings();
+FROM pgmq.list_topic_bindings();
 ```
 
 This means:

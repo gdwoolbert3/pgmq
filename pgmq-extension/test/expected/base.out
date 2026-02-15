@@ -1463,15 +1463,15 @@ SELECT :'second_read_at'::timestamptz > :'first_read_at'::timestamptz AS last_re
 -- =============================================================================
 -- Tests for notify_insert throttle functions
 -- =============================================================================
--- test_insert_notify_throttles_empty
--- Verify insert_notify_throttles returns empty when no throttles are configured
-SELECT COUNT(*) = 0 FROM pgmq.insert_notify_throttles();
+-- test_list_notify_insert_throttles_empty
+-- Verify list_notify_insert_throttles returns empty when no throttles are configured
+SELECT COUNT(*) = 0 FROM pgmq.list_notify_insert_throttles();
  ?column? 
 ----------
  t
 (1 row)
 
--- test_insert_notify_throttles_returns_all
+-- test_list_notify_insert_throttles_returns_all
 -- Create queues and enable notify_insert with different throttle intervals
 SELECT pgmq.create('notify_queue_1');
  create 
@@ -1513,7 +1513,7 @@ NOTICE:  trigger "trigger_notify_queue_insert_listeners" for relation "pgmq.q_no
 (1 row)
 
 -- Should return 3 throttle configurations
-SELECT COUNT(*) = 3 FROM pgmq.insert_notify_throttles();
+SELECT COUNT(*) = 3 FROM pgmq.list_notify_insert_throttles();
  ?column? 
 ----------
  t
@@ -1525,26 +1525,26 @@ SELECT
     bool_and(queue_name IS NOT NULL) AS has_queue_name,
     bool_and(throttle_interval_ms IS NOT NULL) AS has_throttle_interval,
     bool_and(last_notified_at IS NOT NULL) AS has_last_notified_at
-FROM pgmq.insert_notify_throttles();
+FROM pgmq.list_notify_insert_throttles();
  has_all_throttles | has_queue_name | has_throttle_interval | has_last_notified_at 
 -------------------+----------------+-----------------------+----------------------
  t                 | t              | t                     | t
 (1 row)
 
 -- Verify specific throttle values
-SELECT throttle_interval_ms = 100 FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_1';
+SELECT throttle_interval_ms = 100 FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_1';
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT throttle_interval_ms = 250 FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_2';
+SELECT throttle_interval_ms = 250 FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_2';
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT throttle_interval_ms = 500 FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_3';
+SELECT throttle_interval_ms = 500 FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_3';
  ?column? 
 ----------
  t
@@ -1559,14 +1559,14 @@ SELECT pgmq.update_notify_insert('notify_queue_1', 300);
 (1 row)
 
 -- Verify throttle was updated
-SELECT throttle_interval_ms = 300 FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_1';
+SELECT throttle_interval_ms = 300 FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_1';
  ?column? 
 ----------
  t
 (1 row)
 
 -- Verify last_notified_at was reset
-SELECT last_notified_at = to_timestamp(0) FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_1';
+SELECT last_notified_at = to_timestamp(0) FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_1';
  ?column? 
 ----------
  t
@@ -1619,7 +1619,7 @@ SELECT pgmq.update_notify_insert('notify_queue_2', 0);
  
 (1 row)
 
-SELECT throttle_interval_ms = 0 FROM pgmq.insert_notify_throttles() WHERE queue_name = 'notify_queue_2';
+SELECT throttle_interval_ms = 0 FROM pgmq.list_notify_insert_throttles() WHERE queue_name = 'notify_queue_2';
  ?column? 
 ----------
  t
@@ -1651,7 +1651,7 @@ SELECT pgmq.drop_queue('notify_queue_disabled');
 (1 row)
 
 -- Verify throttles were removed after dropping queues (CASCADE should handle this)
-SELECT COUNT(*) = 0 FROM pgmq.insert_notify_throttles();
+SELECT COUNT(*) = 0 FROM pgmq.list_notify_insert_throttles();
  ?column? 
 ----------
  t

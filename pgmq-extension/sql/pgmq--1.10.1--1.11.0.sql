@@ -513,3 +513,101 @@ BEGIN
     RETURN QUERY SELECT * FROM pgmq._send_batch(queue_name, msgs, headers, delay);
 END;
 $$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION pgmq.read_grouped(
+    queue_name TEXT,
+    vt INTEGER,
+    qty INTEGER
+)
+RETURNS SETOF pgmq.message_record AS $$
+DECLARE
+    sql TEXT;
+    qtable TEXT := pgmq.format_table_name(queue_name, 'q');
+BEGIN
+    sql := FORMAT(
+        $QUERY$
+        WITH fifo_groups AS (
+            -- Find the minimum msg_id for each FIFO group that's ready to be processed
+            SELECT
+                COALESCE(headers->>'x-pgmq-group', '_default_fifo_group') as fifo_key,
+                MIN(msg_id) as min_msg_id
+            FROM pgmq.%I
+            WHERE vt <= clock_timestamp()
+            GROUP BY COALESCE(headers->>'x-pgmq-group', '_default_fifo_group')
+        ),
+        locked_groups AS (
+            -- Lock the first available message in each FIFO group
+            SELECT
+                m.msg_id,
+                fg.fifo_key
+            FROM pgmq.%I m
+            INNER JOIN fifo_groups fg ON
+                COALESCE(m.headers->>'x-pgmq-group', '_default_fifo_group') = fg.fifo_key
+                AND m.msg_id = fg.min_msg_id
+            WHERE m.vt <= clock_timestamp()
+            ORDER BY m.msg_id ASC
+            FOR UPDATE SKIP LOCKED
+        ),
+        group_priorities AS (
+            -- Assign priority to groups based on their oldest message
+            SELECT
+                fifo_key,
+                msg_id as min_msg_id,
+                ROW_NUMBER() OVER (ORDER BY msg_id) as group_priority
+            FROM locked_groups
+        ),
+        filtered_groups as (
+            SELECT * FROM group_priorities gp
+            WHERE NOT EXISTS (
+                -- Ensure no earlier message in this group is currently being processed
+                SELECT 1
+                FROM pgmq.%I m2
+                WHERE COALESCE(m2.headers->>'x-pgmq-group', '_default_fifo_group') = gp.fifo_key
+                AND m2.vt > clock_timestamp()
+                AND m2.msg_id < gp.min_msg_id
+            )
+        ),
+        available_messages as (
+            SELECT gp.fifo_key, t.msg_id,gp.group_priority,
+                ROW_NUMBER() OVER (PARTITION BY gp.fifo_key ORDER BY t.msg_id) as msg_rank_in_group
+            FROM filtered_groups gp
+            CROSS JOIN LATERAL (
+                SELECT *
+                FROM pgmq.%I t
+                WHERE COALESCE(t.headers->>'x-pgmq-group', '_default_fifo_group') = gp.fifo_key
+                AND t.vt <= clock_timestamp()
+                ORDER BY msg_id
+                LIMIT $1  -- tip to limit query impact, we know we need at most qty in each group
+            ) t
+            ORDER BY gp.group_priority
+        ),
+        batch_selection AS (
+            -- Select messages to fill batch, prioritizing earliest group
+            SELECT
+                msg_id,
+                ROW_NUMBER() OVER (ORDER BY group_priority, msg_rank_in_group) as overall_rank
+            FROM available_messages
+        ),
+        selected_messages AS (
+            -- Limit to requested quantity
+            SELECT msg_id
+            FROM batch_selection
+            WHERE overall_rank <= $1
+            ORDER BY msg_id
+            FOR UPDATE SKIP LOCKED
+        )
+        UPDATE pgmq.%I m
+        SET
+            vt = clock_timestamp() + %L,
+            read_ct = read_ct + 1,
+            last_read_at = clock_timestamp()
+        FROM selected_messages sm
+        WHERE m.msg_id = sm.msg_id
+        RETURNING m.msg_id, m.read_ct, m.enqueued_at, m.last_read_at, m.vt, m.message, m.headers;
+        $QUERY$,
+        qtable, qtable, qtable, qtable, qtable, make_interval(secs => vt)
+    );
+    RETURN QUERY EXECUTE sql USING qty;
+END;
+$$ LANGUAGE plpgsql;

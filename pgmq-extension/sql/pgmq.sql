@@ -332,26 +332,30 @@ BEGIN
                 ROW_NUMBER() OVER (ORDER BY msg_id) as group_priority
             FROM locked_groups
         ),
-        available_messages AS (
-            -- Get messages prioritizing filling batch from earliest group first
-            SELECT
-                m.msg_id,
-                gp.group_priority,
-                ROW_NUMBER() OVER (PARTITION BY gp.fifo_key ORDER BY m.msg_id) as msg_rank_in_group
-            FROM pgmq.%I m
-            INNER JOIN group_priorities gp ON
-                COALESCE(m.headers->>'x-pgmq-group', '_default_fifo_group') = gp.fifo_key
-            WHERE m.vt <= clock_timestamp()
-            AND m.msg_id >= gp.min_msg_id  -- Only messages from min_msg_id onwards in each group
-            AND NOT EXISTS (
+        filtered_groups as (
+            SELECT * FROM group_priorities gp
+            WHERE NOT EXISTS (
                 -- Ensure no earlier message in this group is currently being processed
                 SELECT 1
                 FROM pgmq.%I m2
-                WHERE COALESCE(m2.headers->>'x-pgmq-group', '_default_fifo_group') =
-                      COALESCE(m.headers->>'x-pgmq-group', '_default_fifo_group')
+                WHERE COALESCE(m2.headers->>'x-pgmq-group', '_default_fifo_group') = gp.fifo_key
                 AND m2.vt > clock_timestamp()
-                AND m2.msg_id < m.msg_id
+                AND m2.msg_id < gp.min_msg_id
             )
+        ),
+        available_messages as (
+            SELECT gp.fifo_key, t.msg_id,gp.group_priority,
+                ROW_NUMBER() OVER (PARTITION BY gp.fifo_key ORDER BY t.msg_id) as msg_rank_in_group
+            FROM filtered_groups gp
+            CROSS JOIN LATERAL (
+                SELECT *
+                FROM pgmq.%I t
+                WHERE COALESCE(t.headers->>'x-pgmq-group', '_default_fifo_group') = gp.fifo_key
+                AND t.vt <= clock_timestamp()
+                ORDER BY msg_id
+                LIMIT $1  -- tip to limit query impact, we know we need at most qty in each group
+            ) t
+            ORDER BY gp.group_priority
         ),
         batch_selection AS (
             -- Select messages to fill batch, prioritizing earliest group

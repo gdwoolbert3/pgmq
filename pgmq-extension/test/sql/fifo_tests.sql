@@ -169,6 +169,30 @@ SELECT
     (SELECT ARRAY_AGG((message->>'message')::text ORDER BY msg_id) FROM results)
         = ARRAY['empty_fifo_sqs', 'null_fifo_sqs', 'no_header', 'explicit_group']::text[] as all_defaults_together;
 
+-- test fifo under heavy load
+SELECT pgmq.purge_queue('fifo_test_queue');
+WITH send_6000_messages as (
+    SELECT pgmq.send('fifo_test_queue', jsonb_build_object(
+        'group', group_num,
+        'message_number', msg_num
+    ), jsonb_build_object('x-pgmq-group', group_num))
+    FROM 
+        generate_series(1, 30) AS group_num,
+        generate_series(1, 200) AS msg_num
+)
+select count(*) FROM send_6000_messages;
+
+WITH start_moment AS (
+    SELECT clock_timestamp() AS start_time
+),
+results AS (
+    SELECT * FROM pgmq.read_grouped('fifo_test_queue', 10, 204), start_moment
+)
+SELECT
+    (SELECT count(results.*) FROM results) = 204 AS read_messages,
+    (SELECT EXTRACT(EPOCH FROM (clock_timestamp() - (SELECT start_time FROM start_moment))) AS elapsed_seconds) < 0.1 AS read_performance;
+
+
 -- Clean up
 SELECT pgmq.drop_queue('fifo_test_queue');
 
